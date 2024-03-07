@@ -2,19 +2,26 @@
 #include "ui_mainwindow.h"
 #include <QPushButton>
 #include <QDialog>
+#include <QLineEdit>
 #include <QMessageBox>
 #include <QTimer>
 #include <QDateTime>
 #include <QSqlQuery>//执行SQL指令
-#include <QTableView>// 显示数据表
+#include <QTableWidget>
+#include <QTableView>
+#include <QModelIndex>
 
-
+#define ROWSUM 10
 
 MainWindow::MainWindow(QWidget *parent)
     : QMainWindow(parent)
     , ui(new Ui::MainWindow)
 {
     ui->setupUi(this);
+    setWindowTitle("查询界面");
+    setFixedSize(800,600);
+
+    showWin = new showWindow;
 
     //time设置
     QTimer *timer = new QTimer(this);
@@ -23,7 +30,7 @@ MainWindow::MainWindow(QWidget *parent)
 
     //comboBox设置
     QStringList strList;
-    strList<<"标题"<<"作者"<<"rfid号码";
+    strList<<"title"<<"author"<<"rfid";
     ui->comboBox->addItems(strList);
 
     //输入框设置
@@ -32,25 +39,17 @@ MainWindow::MainWindow(QWidget *parent)
     //table设置
     this->dbSet("bigcreate");//database连接
     //this->dbAdd();
+    this->tableViewSet();
+    listLen=-1;
 
-    model_=new QSqlTableModel(this);
-    model_->setTable("bookinfo");
-    // model_->setEditStrategy(QSqlTableModel::OnManualSubmit);
-    // model_->setSort(0,Qt::AscendingOrder);//设置数据更新模式(行/列某值更新时hi立即更新到数据库
-    model_->setHeaderData(0,Qt::Horizontal,"RFID");
-    model_->setHeaderData(1,Qt::Horizontal,"标题");
-    model_->setHeaderData(2,Qt::Horizontal,"作者");
-    model_->setHeaderData(3,Qt::Horizontal,"位置");
-    model_->setHeaderData(4,Qt::Horizontal,"状态");
-    ui->dbTable->setModel(model_);
 
     //button设置
     connect(ui->findBtn,&QPushButton::clicked,[=](){this->serBook();});//查找书籍
     connect(ui->showBtn,&QPushButton::clicked,[=](){this->showBook();});//显示书籍
-
-    //持续监听是否返回，若返回 则清空数据，重新查询(不如直接return 0)
-    //connect(showWin,&showWindow::backBtn,this,[=]{showWin->hide();this->show();});
-
+    connect(showWin,&showWindow::windowBack,this,[=](){
+        showWin->hide();
+        this->show();
+    });
 }
 
 //timer设置 实时更新
@@ -93,23 +92,58 @@ void MainWindow::dbAdd(){
 
 }
 
-//serBtn设置 查找书籍
+//tableView建立
+void MainWindow::tableViewSet(){
+    //设置行数:ROWSUM=10 列数固定表头数5 不可更改
+    model = new QStandardItemModel(ROWSUM,5,this);
+    //设置表头 不可更改
+    QStringList headerText;
+    headerText<<"RFID号码"<<"标题"<<"作者"<<"位置"<<"借还状态";
+    model->setHorizontalHeaderLabels(headerText);
+    ui->tableView->setModel(model);
+    //设置列宽：自适应
+    ui->tableView->horizontalHeader()->setSectionResizeMode(QHeaderView::Stretch);
+    // ui->tableView->setColumnWidth(0,30);
+    //行背景色交替改变，隔行颜色变化 行选定：ui 不可编辑：ui 只能选单行：ui
+    ui->tableView->setAlternatingRowColors(true);
+}
+
+//serBtn设置 查找书籍：精确查找 可提升！！！！
 void MainWindow::serBook(){
     QString type=ui->comboBox->currentText();
     QString inPut=ui->lineEdit->text();
-    //两个参数上传数据库 得到信息展示在table里 更改状态
-    // QString sql =  "SELECT * FROM bookInfo WHERE "+ type + "= "+ inPut +""; // 组装sql语句
-    // QSqlQuery query(db);                               // [1] 传入数据库连接
-    // query.exec(sql);                                   // [2] 执行sql语句
-    // while (query.next()) {                             // [3] 遍历查询结果
-    //     // qDebug() << QString("Id: %1, Username: %2")
-    //     //                 .arg(query.value("id").toInt())
-    //     //                 .arg(query.value("username").toString());
-    // }
-    model_->setFilter("");
+    if(!ui->lineEdit->isModified())
+        QMessageBox::information(this,"注意","请输入查询关键字！");
+    else{
+        //两个参数上传数据库 得到信息展示在table里 更改状态
+        QString sql = QString("SELECT * FROM bookInfo WHERE %1 like '%%2%'").arg(type).arg(inPut) ; // 组装sql语句
+        // qDebug() << sql <<"\n";
 
-
+        QSqlQuery query(db);                               // [1] 传入数据库连接
+        query.exec(sql);                                   // [2] 执行sql语句
+        listLen=-1;
+        while(query.next()&&listLen<ROWSUM){
+            listLen++;
+            model->setItem(listLen,0,new QStandardItem(query.value("rfid").toString()));
+            model->setItem(listLen,1,new QStandardItem(query.value("title").toString()));
+            model->setItem(listLen,2,new QStandardItem(query.value("author").toString()));
+            QString positon = QString("%1列%2架%3层")
+                                  .arg(query.value("x").toInt())
+                                  .arg(query.value("y").toInt())
+                                  .arg(query.value("z").toInt());
+            model->setItem(listLen,3,new QStandardItem(positon));
+            QString con;
+            if(query.value("con").toInt()==0)
+                con = "可借";
+            else if(query.value("con").toInt()==1)
+                con = "已被借出";
+            else if(query.value("con").toInt()==2)
+                con = "不在架上";
+            model->setItem(listLen,4,new QStandardItem(con));
+        }
+    }
 }
+
 //showBtn设置 显示书籍
 void MainWindow::showBook(){
     //模态、非模态对话框
@@ -119,17 +153,23 @@ void MainWindow::showBook(){
     // //warning.show();
     // warning.setAttribute(Qt::WA_DeleteOnClose);
     //消息对话框
-    //if()
+    // qDebug() << listLen <<"\n";
+    // qDebug() << ui->tableView->currentIndex().row() <<"\n";
+    int rowCur = ui->tableView->currentIndex().row();
+    if(rowCur > listLen)
         QMessageBox::information(this,"注意","请选定一个需要显示的书籍！");
-    // else{
-    //转换另一个界面
+    else{//转换另一个界面
+        QModelIndex index1 =model->index(rowCur,3);
+        showWin->posUpdate(model->data(index1).toString());
+
         QTimer::singleShot(500,this,[=](){//延时0.5s
-            showWin = new showWindow;
             this->hide();
             showWin->show();
         });
+    }
 }
 
+//析构函数
 MainWindow::~MainWindow()
 {
     delete ui;

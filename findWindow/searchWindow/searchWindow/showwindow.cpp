@@ -1,16 +1,30 @@
 #include "showwindow.h"
+#include "ui_showwindow.h"
+#include <QDebug>
 
 showWindow::showWindow(QWidget *parent)
-    : QMainWindow{parent}
+    : QGroupBox(parent)
+    , ui(new Ui::showWindow)
 {
-    //界面基础设置
-    this->setFixedSize(800, 600);
-    this->setWindowTitle("显示界面");
+    ui->setupUi(this);
+    //widget
+    setWindowTitle("显示界面");
+    setFixedSize(800,600);
 
-    //opengl二维显示
+    //backBtn
+    connect(ui->backBtn,&QPushButton::clicked,[=](){
+        emit this->windowBack();
+    });
 
-    //opengl三维显示
+}
 
-    //返回Button
+//updateLabel
+void showWindow::posUpdate(QString text){
+    ui->posLabel->setText(text);
+}
 
+
+showWindow::~showWindow()
+{
+    delete ui;
 }

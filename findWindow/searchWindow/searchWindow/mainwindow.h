@@ -4,7 +4,8 @@
 #include <QMainWindow>
 #include "showwindow.h"
 #include <QtSql/QSqlDataBase>
-#include <QSqlTableModel>
+#include <QStandardItemModel>
+#include <QDebug>
 
 QT_BEGIN_NAMESPACE
 namespace Ui {
@@ -16,8 +17,9 @@ class MainWindow : public QMainWindow
 {
     Q_OBJECT
     QSqlDatabase db;
-    QSqlTableModel* model_;
     QTimer *timer;
+    QStandardItemModel* model;
+    int listLen;
 
 public:
     MainWindow(QWidget *parent = nullptr);
@@ -29,6 +31,8 @@ public:
     void dbAdd();
     void serBook();
     void showBook();
+    void tableSet();
+    void tableViewSet();
 
 private:
     Ui::MainWindow *ui;
